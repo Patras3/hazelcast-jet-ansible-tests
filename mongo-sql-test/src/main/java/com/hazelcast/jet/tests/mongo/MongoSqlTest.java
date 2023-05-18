@@ -35,6 +35,7 @@ import com.mongodb.client.model.ValidationOptions;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -97,7 +98,7 @@ public class MongoSqlTest extends AbstractSoakTest {
                 final String sinkCollectionName = SINK_COLLECTION_PREFIX + jobCounter;
                 final String startAt = Instant.now().atZone(ZoneOffset.UTC)
                         .with(ChronoField.MILLI_OF_SECOND, 0).format(DateTimeFormatter.ISO_INSTANT);
-
+                Profiler.start("createDataConnection");
                 final String createDataConnection = "CREATE OR REPLACE DATA CONNECTION"
                         + " Mongo"
                         + " TYPE Mongo SHARED"
@@ -106,8 +107,11 @@ public class MongoSqlTest extends AbstractSoakTest {
                         + "  'database' = '" + MONGO_DATABASE + "'"
                         + "  )";
                 executeQueryWithNoErrorAssert(createDataConnection);
+                logger.warning(Profiler.stop());
 
+                Profiler.start("createCollections");
                 createCollections(sourceCollectionName, sinkCollectionName);
+                logger.warning(Profiler.stop());
 
                 final String sourceMappingSql = "CREATE OR REPLACE MAPPING "
                         + sourceCollectionName
@@ -124,7 +128,9 @@ public class MongoSqlTest extends AbstractSoakTest {
                         + " OPTIONS ( "
                         + "   'startAt' = '" + startAt + "' "
                         + "   )";
+                Profiler.start("sourceMappingSql");
                 executeQueryWithNoErrorAssert(sourceMappingSql);
+                logger.warning(Profiler.stop());
 
                 final String sinkMappingSql = "CREATE OR REPLACE MAPPING "
                         + sinkCollectionName
@@ -140,7 +146,9 @@ public class MongoSqlTest extends AbstractSoakTest {
                         + " OBJECT TYPE Collection "
                         + " OPTIONS ( "
                         + " )";
+                Profiler.start("sinkMappingSql");
                 executeQueryWithNoErrorAssert(sinkMappingSql);
+                logger.warning(Profiler.stop());
 
                 //Create job which writes from source into sink
                 final String jobName = sourceCollectionName + "_into_" + sinkCollectionName;
@@ -151,26 +159,52 @@ public class MongoSqlTest extends AbstractSoakTest {
                         + " ) AS "
                         + " INSERT INTO " + sinkCollectionName
                         + " SELECT * FROM " + sourceCollectionName;
+                Profiler.start("createJobWhichWritesFromSourceIntoSink & assert status");
                 executeQueryWithNoErrorAssert(createJobWhichWritesFromSourceIntoSink);
                 assertJobStatusEventually(client.getJet().getJob(jobName));
+                logger.warning(Profiler.stop());
 
                 //Insert
+                Profiler.start("insertDataViaMongoClientAndVerify");
                 insertDataViaMongoClientAndVerify(jobCounter, sqlService, sourceCollectionName, sinkCollectionName);
+                logger.warning(Profiler.stop());
+
+                Profiler.start("assertCollectionsAreEqual");
                 assertCollectionsAreEqual(sourceCollectionName, sinkCollectionName);
+                logger.warning(Profiler.stop());
+
+                Profiler.start("insertDataViaSqlAndVerify");
                 insertDataViaSqlAndVerify(jobCounter, sqlService, sourceCollectionName, sinkCollectionName);
+                logger.warning(Profiler.stop());
 
                 //Update
+                Profiler.start("updateDataViaMongoClientAndVerify");
                 updateDataViaMongoClientAndVerify(sinkCollectionName);
+                logger.warning(Profiler.stop());
+
+                Profiler.start("updateDataViaSqlAndVerify");
                 updateDataViaSqlAndVerify(sinkCollectionName);
+                logger.warning(Profiler.stop());
 
                 //Delete
+                Profiler.start("deleteViaMongoClientAndVerify");
                 deleteViaMongoClientAndVerify(sinkCollectionName);
+                logger.warning(Profiler.stop());
+
+                Profiler.start("deleteOneViaSqlAndVerify");
                 deleteOneViaSqlAndVerify(sinkCollectionName);
+                logger.warning(Profiler.stop());
 
                 //Cleanup
+                Profiler.start("dropMappingsAndCancelJob");
                 dropMappingsAndCancelJob(sourceCollectionName, sinkCollectionName, jobName);
+                logger.warning(Profiler.stop());
+
+                Profiler.start("deleteCollection - both");
                 deleteCollection(sourceCollectionName);
                 deleteCollection(sinkCollectionName);
+                logger.warning(Profiler.stop());
+
 
                 jobCounter++;
                 if (jobCounter % LOG_JOB_COUNT_THRESHOLD == 0) {
@@ -418,4 +452,20 @@ public class MongoSqlTest extends AbstractSoakTest {
     protected void teardown(final Throwable t) {
     }
 
+    static class Profiler {
+        private static Instant startAt;
+        private static String msg = "";
+
+        public static void start(String msgIn) {
+            startAt = Instant.now();
+            msg = msgIn;
+        }
+
+        public static String stop() {
+            Instant stop = Instant.now();
+            Duration duration = Duration.between(startAt, stop);
+            startAt = null;
+            return String.format("\n%20s | %s", duration.toString(), msg);
+        }
+    }
 }

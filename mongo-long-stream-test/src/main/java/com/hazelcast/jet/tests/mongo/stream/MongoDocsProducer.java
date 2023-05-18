@@ -22,6 +22,9 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 
+import java.time.Duration;
+import java.time.Instant;
+
 import static com.hazelcast.jet.impl.util.Util.uncheckRun;
 import static com.hazelcast.jet.tests.common.Util.sleepMillis;
 
@@ -50,8 +53,10 @@ public class MongoDocsProducer {
                     .getCollection(collectionName);
             long id = 0;
             while (running) {
+                Profiler.start("MongoDocsProducer#insertOne");
                 collection
                         .insertOne(new Document("docId", id++));
+                Profiler.stop();
                 producedItems = id;
 
                 if (id % PRINT_LOG_INSERT_ITEMS == 0) {
@@ -74,6 +79,23 @@ public class MongoDocsProducer {
         running = false;
         producerThread.join();
         return producedItems;
+    }
+
+    static class Profiler {
+        private static Instant startAt;
+        private static String msg = "";
+
+        public static void start(String msgIn) {
+            startAt = Instant.now();
+            msg = msgIn;
+        }
+
+        public static String stop() {
+            Instant stop = Instant.now();
+            Duration duration = Duration.between(startAt, stop);
+            startAt = null;
+            return String.format("\n%20s | %s", duration.toString(), msg);
+        }
     }
 
 }
