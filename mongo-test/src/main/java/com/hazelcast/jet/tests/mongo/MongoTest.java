@@ -37,6 +37,8 @@ import com.mongodb.client.MongoClients;
 import org.bson.BsonTimestamp;
 import org.bson.Document;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -98,20 +100,40 @@ public class MongoTest extends AbstractSoakTest {
         final long begin = System.currentTimeMillis();
         try {
             while (System.currentTimeMillis() - begin < durationInMillis) {
+                Profiler.start("deleteCollectionAndCreateNewOne(jobCounter)");
                 deleteCollectionAndCreateNewOne(jobCounter);
+                logger.info(Profiler.stop());
+
+                Profiler.start("clearSinks(client)");
                 clearSinks(client);
+                logger.info(Profiler.stop());
 
                 startStreamReadFromMongoPipeline(client, jobCounter);
+                Profiler.start("executeWriteToMongoPipeline(client, jobCounter)");
                 executeWriteToMongoPipeline(client, jobCounter);
+                logger.info(Profiler.stop());
+
+                Profiler.start("executeBatchReadFromMongoPipeline(client, jobCounter)");
                 executeBatchReadFromMongoPipeline(client, jobCounter);
+                logger.info(Profiler.stop());
 
+                Profiler.start("assertBatchResults(client, jobCounter)");
                 assertBatchResults(client, jobCounter);
-                assertStreamResults(client, jobCounter);
+                logger.info(Profiler.stop());
 
+                Profiler.start("assertStreamResults(client, jobCounter);");
+                assertStreamResults(client, jobCounter);
+                logger.info(Profiler.stop());
+
+                
+                
                 stopStreamRead(client, jobCounter);
                 clearSinks(client);
-                deleteCollectionAndCreateNewOne(jobCounter);
 
+                Profiler.start("deleteCollectionAndCreateNewOne(jobCounter)");
+                deleteCollectionAndCreateNewOne(jobCounter);
+                logger.info(Profiler.stop());
+                
                 if (jobCounter % LOG_JOB_COUNT_THRESHOLD == 0) {
                     logger.info("Job count: " + jobCounter);
                 }
@@ -265,6 +287,22 @@ public class MongoTest extends AbstractSoakTest {
                 logger.info(item.toString());
             }
             throw ex;
+        }
+    }
+    static class Profiler {
+        private static Instant startAt;
+        private static String msg = "";
+
+        public static void start(String msgIn) {
+            startAt = Instant.now();
+            msg = msgIn;
+        }
+
+        public static String stop() {
+            Instant stop = Instant.now();
+            Duration duration = Duration.between(startAt, stop);
+            startAt = null;
+           return String.format("\n%20s | %s", duration.toString(),msg);
         }
     }
 
