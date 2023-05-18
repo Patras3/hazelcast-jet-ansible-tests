@@ -125,19 +125,14 @@ public class MongoTest extends AbstractSoakTest {
                 assertStreamResults(client, jobCounter);
                 logger.info(Profiler.stop());
 
-                
-                
                 stopStreamRead(client, jobCounter);
                 clearSinks(client);
-
                 Profiler.start("deleteCollectionAndCreateNewOne(jobCounter)");
                 deleteCollectionAndCreateNewOne(jobCounter);
                 logger.info(Profiler.stop());
-                
-                if (jobCounter % LOG_JOB_COUNT_THRESHOLD == 0) {
-                    logger.info("Job count: " + jobCounter);
-                }
-
+                //if (!false || jobCounter % LOG_JOB_COUNT_THRESHOLD == 0) {
+                logger.info("Job count: " + jobCounter);
+                //}
                 jobCounter++;
                 sleepSeconds(SLEEP_BETWEEN_READS_SECONDS);
             }
@@ -178,11 +173,11 @@ public class MongoTest extends AbstractSoakTest {
 
     private void deleteCollectionAndCreateNewOne(final int collectionCounter) {
         mongoClient.getDatabase(MONGO_DATABASE)
-                    .getCollection(COLLECTION_PREFIX + collectionCounter)
-                    .drop();
+                .getCollection(COLLECTION_PREFIX + collectionCounter)
+                .drop();
 
         mongoClient.getDatabase(MONGO_DATABASE)
-                    .createCollection(COLLECTION_PREFIX + collectionCounter);
+                .createCollection(COLLECTION_PREFIX + collectionCounter);
     }
 
     private void startStreamReadFromMongoPipeline(final HazelcastInstance client, final int collectionCounter) {
@@ -289,6 +284,7 @@ public class MongoTest extends AbstractSoakTest {
             throw ex;
         }
     }
+
     static class Profiler {
         private static Instant startAt;
         private static String msg = "";
@@ -302,7 +298,7 @@ public class MongoTest extends AbstractSoakTest {
             Instant stop = Instant.now();
             Duration duration = Duration.between(startAt, stop);
             startAt = null;
-           return String.format("\n%20s | %s", duration.toString(),msg);
+            return String.format("\n%20s | %s", duration.toString(), msg);
         }
     }
 
